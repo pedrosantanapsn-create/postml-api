@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+
+# Sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Arquivos sensiveis
+.env
+*.key
+secrets.json
+
+# Locais
+INICIAR-POSTML-FREE.bat
+*.bat
