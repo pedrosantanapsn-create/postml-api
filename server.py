@@ -44,16 +44,66 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
         if self.path == '/api/dalle':
             self.handle_dalle()
+        elif self.path.startswith('/api/wa/'):
+            self.handle_wa_proxy()
         else:
             self.send_error(404, 'Endpoint nao encontrado')
+
+    def do_DELETE(self):
+        if self.path.startswith('/api/wa/'):
+            self.handle_wa_proxy()
+        else:
+            self.send_error(404, 'Not found')
 
     def do_OPTIONS(self):
         self.send_response(200)
         self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-WA-URL, X-WA-KEY')
         self.send_header('Access-Control-Max-Age', '86400')
         self.end_headers()
+
+    # ========================================================
+    # EVOLUTION API PROXY — evita CORS do navegador
+    # ========================================================
+    def handle_wa_proxy(self):
+        try:
+            wa_url = self.headers.get('X-WA-URL', '').rstrip('/')
+            wa_key = self.headers.get('X-WA-KEY', '')
+            if not wa_url or not wa_key:
+                self.send_json({'error': 'X-WA-URL e X-WA-KEY sao obrigatorios'}, 400)
+                return
+
+            wa_path = self.path[len('/api/wa'):]
+            content_length = int(self.headers.get('Content-Length', 0))
+            body_data = self.rfile.read(content_length) if content_length > 0 else None
+            target = wa_url + wa_path
+            print(f'[WA] {self.command} {target}')
+
+            req = urllib.request.Request(
+                target,
+                data=body_data,
+                headers={'Content-Type': 'application/json', 'apikey': wa_key},
+                method=self.command
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=60) as resp:
+                    raw = resp.read()
+                    self.send_response(resp.status)
+                    self.send_header('Content-Type', 'application/json; charset=utf-8')
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.end_headers()
+                    self.wfile.write(raw)
+            except urllib.error.HTTPError as e:
+                raw = e.read()
+                self.send_response(e.code)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(raw)
+        except Exception as e:
+            print(f'[WA] Erro: {e}')
+            self.send_json({'error': str(e)}, 500)
 
     def handle_dalle(self):
         try:
